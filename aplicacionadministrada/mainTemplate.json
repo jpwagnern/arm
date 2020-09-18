@@ -1,0 +1,315 @@
+
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "phoneNumber": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Numero telefónico al cual se enviará la alerta"
+            }
+        },
+        "emailAddress": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Dirección de correo eectónico a la cual se eviará la alerta"
+            }
+        }
+    },
+    "variables": {
+        "location": "[resourceGroup().location]",
+        "storageaccountName": "[concat('ambstorage', uniqueString(resourceGroup().id))]",
+        "workspaceName": "[concat('AMB-Workspace-', uniqueString(resourceGroup().id))]",
+        "Updates": {
+            "name": "[concat('Updates', '(', variables('workspaceName'), ')')]",
+            "galleryName": "Updates"
+        },
+        "vaultName": "[concat('AMB-Vault-', uniqueString(resourceGroup().id))]",
+        "policyName": "Precitool-Policy",
+        "timeZone": "Central Standard Time (Mexico)",
+        "scheduleRunTimes":["01:00"],
+        "daysOfTheWeek":["Sunday"],
+        "instantRpRetentionRangeInDays": 2,
+        "dailyRetentionDurationCount": 16,
+        "weeklyRetentionDurationCount": 6,
+        "monthlyRetentionDurationCount": 4,
+        "actiongroupName": "Notificaciones",
+        "actiongroupShortName":"Notify",
+        "backupalertName": "Implementación de Backup correcta",
+        "cpualertName": "Procentaje de CPU mayor a 60",
+        "automationAccountName": "[concat('AMB-AutoAccount-', uniqueString(resourceGroup().id))]",
+
+        "backupFabric": "Azure",
+        "v2VmContainer": "iaasvmcontainer;iaasvmcontainerv2;",
+        "v2Vm": "vm;iaasvmcontainerv2;"
+    },
+    "resources": [
+        {   
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageaccountName')]",
+            "apiVersion": "2017-06-01",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "Storage",
+            "properties": {}
+        },
+        {
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "name": "[variables('workspaceName')]",
+            "apiVersion": "2020-03-01-preview",
+            "location": "WestUS2",
+            "properties": {
+                "sku": {
+                    "name": "pergb2018"
+                },
+                "retentionInDays": 60,
+                "features": {
+                    "searchVersion": 1,
+                    "legacy": 0,
+                    "enableLogAccessUsingOnlyResourcePermissions": true
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "location": "WestUS2",
+                    "name": "[variables('Updates').name]",
+                    "type": "Microsoft.OperationsManagement/solutions",
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/Microsoft.OperationsManagement/solutions/', variables('Updates').name)]",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    ],
+                    "properties": {
+                        "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    },
+                    "plan": {
+                        "name": "[variables('Updates').name]",
+                        "publisher": "Microsoft",
+                        "promotionCode": "",
+                        "product": "[concat('OMSGallery/', variables('Updates').galleryName)]"
+                    }
+                }
+            ],
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageaccountName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts",
+            "apiVersion": "2018-06-30",
+            "name": "[variables('automationAccountName')]",
+            "location": "WestUS2",
+            "tags": {},
+            "properties": {
+                "sku": {
+                    "name": "Basic"
+                }
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces/', variables('workspaceName'))]"
+            ]
+            
+        },
+        {
+            "apiVersion": "2020-03-01-preview",
+            "type": "Microsoft.OperationalInsights/workspaces/linkedServices",
+            "name": "[concat(variables('workspaceName'), '/' , 'Automation')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]",
+                "[concat('Microsoft.Automation/automationAccounts/', variables('automationAccountName'))]"
+            ],
+            "properties": {
+                "resourceId": "[resourceId('Microsoft.Automation/automationAccounts/', variables('automationAccountName'))]"
+            }
+        },
+        {
+            "type": "Microsoft.RecoveryServices/vaults",
+            "name": "[variables('vaultName')]",
+            "apiVersion": "2016-06-01",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "RS0",
+                "tier": "Standard"
+            },
+            "properties": {},
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces/', variables('workspaceName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.RecoveryServices/vaults/backupPolicies",
+            "name": "[concat(variables('vaultName'), '/', variables('policyName'))]",
+            "apiVersion": "2016-06-01",
+            "location": "[variables('location')]",
+            "properties": {
+                "backupManagementType": "AzureIaasVM",
+                "instantRpRetentionRangeInDays": "[variables('instantRpRetentionRangeInDays')]",
+                "schedulePolicy": {
+                    "scheduleRunFrequency": "Daily",
+                    "scheduleRunDays": null,
+                    "scheduleRunTimes": "[variables('scheduleRunTimes')]",
+                    "schedulePolicyType": "SimpleSchedulePolicy"
+                },
+                "retentionPolicy": {
+                    "dailySchedule": {
+                        "retentionTimes": "[variables('scheduleRunTimes')]",
+                        "retentionDuration": {
+                            "count": "[variables('dailyRetentionDurationCount')]",
+                            "durationType": "Days"
+                        }
+                    },
+                    "weeklySchedule": {
+                        "daysOfTheWeek": "[variables('daysOfTheWeek')]",
+                        "retentionTimes": "[variables('scheduleRunTimes')]",
+                        "retentionDuration": {
+                            "count": "[variables('weeklyRetentionDurationCount')]",
+                            "durationType": "Weeks"
+                        }
+                    },
+                    "monthlySchedule": {
+                        "retentionScheduleFormatType": "Daily",
+                        "retentionScheduleDaily": {
+                            "daysOfTheMonth": [
+                                {
+                                "date": 1,
+                                "isLast": false
+                                }
+                            ]
+                        },
+                        "retentionScheduleWeekly": null,
+                        "retentionTimes": "[variables('scheduleRunTimes')]",
+                        "retentionDuration": {
+                            "count": "[variables('monthlyRetentionDurationCount')]",
+                            "durationType": "Months"
+                        }
+                    },
+                    "retentionPolicyType": "LongTermRetentionPolicy"
+                },
+                "timeZone": "[variables('timeZone')]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.RecoveryServices/vaults/', variables('vaultName'))]"
+            ]            
+        },
+        {
+            "type": "Microsoft.RecoveryServices/vaults/providers/diagnosticSettings",
+            "name": "[concat(variables('vaultName'), '/microsoft.insights/', variables('workspaceName'))]",
+            "apiVersion": "2017-05-01-preview",
+            "properties": {
+                "name": "[variables('workspaceName')]",
+                "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageaccountName'))]",
+                "workspaceId": "[resourceId('microsoft.operationalinsights/workspaces/', variables('workspaceName'))]",
+                "logs": [
+                    {
+                        "category": "CoreAzureBackup",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": 60,
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "category": "AddonAzureBackupJobs",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": 60,
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "category": "AddonAzureBackupAlerts",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": 60,
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "category": "AddonAzureBackupPolicy",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": 60,
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "category": "AddonAzureBackupStorage",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": 60,
+                            "enabled": true
+                        }
+                    }
+                ],
+                "metrics": []
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.RecoveryServices/vaults/', variables('vaultName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Insights/actionGroups",
+            "name": "[variables('actiongroupName')]",
+            "apiVersion": "2018-03-01",
+            "location": "Global",
+            "properties": {
+                "groupShortName": "[variables('actiongroupShortName')]",
+                "enabled": true,
+                "smsReceivers": [
+                    {
+                    "name": "SMS",
+                    "countryCode": "52",
+                    "phoneNumber": "[parameters('phoneNumber')]"
+                    }
+                ],
+                "emailReceivers": [
+                    {
+                    "name": "Email",
+                    "emailAddress": "[parameters('emailAddress')]"
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.RecoveryServices/vaults/backupPolicies', variables('vaultName'), variables('policyName'))]"
+            ]
+        },
+        {
+            "type":"Microsoft.Insights/scheduledQueryRules",
+            "name": "[variables('backupalertName')]",
+            "apiVersion": "2018-04-16",
+            "location": "WestUS2",
+            "properties":{
+                "description": "Sample log query alert",
+                "enabled": "true",
+                "source": {
+                    "query": "AddonAzureBackupJobs | summarize arg_max(TimeGenerated,*) by JobUniqueId | where JobStatus == \"Completed\"",
+                    "dataSourceId": "[resourceId('microsoft.operationalinsights/workspaces/', variables('workspaceName'))]",
+                    "queryType":"ResultCount"
+                },
+                "schedule":{
+                    "frequencyInMinutes": 15,
+                    "timeWindowInMinutes": 60
+                },
+                "action":{
+                    "odata.type": "Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.DataContracts.Resources.ScheduledQueryRules.AlertingAction",
+                    "severity": "4",
+                    "aznsAction":{
+                        "actionGroup": "[array(resourceId('Microsoft.Insights/actionGroups', variables('actiongroupName')))]"
+                    },
+                    "trigger":{
+                        "thresholdOperator": "GreaterThan",
+                        "threshold": 1
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups/', variables('actiongroupName'))]"
+            ]
+        }
+    ]
+  }

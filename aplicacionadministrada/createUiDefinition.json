@@ -1,0 +1,40 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+    "handler": "Microsoft.Azure.CreateUIDef",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "resourceTypes": ["Microsoft.Compute/virtualMachines"],        
+        "basics": [],
+        "steps": [
+            {
+                "name": "ContactInfo",
+                "label": "Información de Contacto",
+                "elements": [
+                    {
+                        "name": "smstextbox",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Número de teléfono",
+                        "placeholder": "Número telefónico a 10 digitos",
+                        "constraints":{
+                            "required": true
+                        }
+                    },
+                    {
+                        "name": "mailtextbox",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Dirección de correo electrónico",
+                        "placeholder": "correo@dominio.com",
+                        "constraints":{
+                            "required": true
+                        } 
+                    }
+                ]
+            }
+        ],
+        "outputs": {
+            "phoneNumber": "[steps('ContactInfo').smstextbox]",
+            "emailAddress": "[steps('ContactInfo').mailtextbox]"
+        }
+    
+    }
+}
