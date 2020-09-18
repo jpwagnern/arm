@@ -320,7 +320,7 @@
                             "metricName": "Percentage CPU",
                             "dimensions":[],
                             "operator": "GreaterThan",
-                            "threshold" : 2,
+                            "threshold" : 60,
                             "timeAggregation": "Average"                        
                         }
                     ]
